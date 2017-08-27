@@ -1,7 +1,8 @@
 """ Utilities for working with blend files, target paths, etc."""
 import os
 import sys
-from os.path import join
+from genericpath import exists
+from os.path import join, dirname, abspath
 
 import render_graph
 
@@ -17,7 +18,9 @@ def get_directory_for_target(project_root, target):
         sys.exit(1)
     assert target_prefix.startswith('//')
     stripped_target_prefix = target_prefix.replace('//', '')
-    return join(project_root, stripped_target_prefix)
+
+    # We use abspath here to make sure that the slashes are all going the right way.
+    return abspath(join(project_root, stripped_target_prefix))
 
 
 def get_render_directory_for_target(project_root, target):
@@ -47,7 +50,7 @@ def get_blend_file_for_target(project_root, target):
     :param target: The name of the target, starting with the "//".
     :return: The absolute path to the blend file associated with the target.
     """
-    return join(get_directory_for_target(project_root, target), render_graph.targets[target]['src'])
+    return abspath(join(get_directory_for_target(project_root, target), render_graph.targets[target]['src']))
 
 
 # Blend file utility methods.
@@ -119,3 +122,27 @@ def replace_relative_project_prefix(project_root, target_or_blend_file):
     stripped_path = target_or_blend_file.replace('//', '')
     path = os.path.normpath(join(project_root, stripped_path))
     return path
+
+
+def get_target_name_from_blend_file(blend_file):
+    if not render_graph:
+        return None
+
+    target_directory = get_target_root_for_blend_file(blend_file)
+    render_file = join(target_directory, 'RENDER.py')
+    if not exists(render_file):
+        return None
+
+    render_graph.targets = {}
+    exec(open(render_file).read())
+    for key in render_graph.targets.keys():
+        # there *should* only be one here.
+        return key
+
+
+def get_target_directory_from_latest_directory(latest_directory):
+    if latest_directory.endswith('\\'):
+        latest_directory = dirname(latest_directory)
+    image_sequences_directory = dirname(latest_directory)
+    renders_directory = dirname(image_sequences_directory)
+    return dirname(renders_directory)

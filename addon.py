@@ -1,6 +1,7 @@
+""" NOTE: THIS FILE IS INTENDED TO BE EXECUTED WITHIN BLENDER IT ALMOST CERTAINLY WON't WORK OTHERWISE. """
+
 import json
 import os
-
 from os.path import (
     basename,
     dirname,
@@ -17,22 +18,26 @@ from bpy.props import (
 )
 from bpy.types import PropertyGroup
 
+from path_utils import get_target_name_from_blend_file, get_target_directory_from_latest_directory
+
 try:
     import render_graph
-    import autorender
     import render_manager
     import local_processor
+    import path_utils
 except ImportError:
     # Initialize these so we can test against them.
     render_graph = None
-    autorender = None
+    render_manager = None
+    local_processor = None
+    path_utils
     # TODO(mattkeller): find some way to report this in the UI?
     print("Custom imports failed. Set PYTHONPATH to include scripts dir for full functionality.")
 
 bl_info = {
     "name": "DepRender",
     "author": "Matt Keller <matthew.ed.keller@gmail.com>",
-    "version": (1, 0, 3),
+    "version": (1, 0, 5),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
@@ -73,54 +78,25 @@ class DepRenderPanel(bpy.types.Panel):
         row.prop(settings, "render_strategy", expand=True)
 
 
-def get_target_directory_from_blend_file(blend_file):
-    blend_files_directory = dirname(blend_file)
-    if basename(blend_files_directory) != 'blend_files':
-        return None
-    return dirname(blend_files_directory)
-
-
-def get_target_name_from_blend_file(blend_file):
-    if not render_graph:
-        return None
-
-    target_directory = get_target_directory_from_blend_file(blend_file)
-    render_file = join(target_directory, 'RENDER.py')
-    if not exists(render_file):
-        return None
-
-    render_graph.targets = {}
-    exec(open(render_file).read())
-    for key in render_graph.targets.keys():
-        # there *should* only be one here.
-        return key
-
-
-def get_target_directory_from_latest_directory(latest_directory):
-    if latest_directory.endswith('\\'):
-        latest_directory = dirname(latest_directory)
-    image_sequences_directory = dirname(latest_directory)
-    renders_directory = dirname(image_sequences_directory)
-    return dirname(renders_directory)
-
-
-# This has a very similar cousin in autorender.py
-# These two methods should probably be combined.
 def replace_absolute_project_prefix(context, target_or_blend_file):
+    """Convenience method to grab the project root from the context, then call the common method."""
     absolute_project_root = bpy.path.abspath(context.scene.dep_render_settings.project_root)
-    relative_blend_file = relpath(target_or_blend_file, absolute_project_root)
-    relative_blend_file = relative_blend_file.replace('\\', '/')
-    return "//" + relative_blend_file
+    return path_utils.replace_absolute_project_prefix(absolute_project_root, target_or_blend_file)
 
 
 def generate_render_file(context):
     # select the source for the new target
     blend_file = bpy.data.filepath
-    target_directory = get_target_directory_from_blend_file(blend_file)
+    target_directory = path_utils.get_target_root_for_blend_file(blend_file)
 
     if target_directory:
-        render_file = join(target_directory, 'RENDER.py')
+        render_file = join(target_directory, 'RENDER.json')
 
+        # check if the file exists
+        #     if so parse it as json.
+        #     check if the target for this blend file exists (how do I do that?)
+        #         if so update the dependencies and assets (eventually...)
+        #
         if not exists(render_file) and target_directory:
 
             source_file = relpath(blend_file, target_directory).replace('\\', '/')
@@ -225,7 +201,7 @@ class RENDER_PT_RenderAsFile(bpy.types.Operator):
     rm = None
 
     def modal(self, context, event):
-        if event.type in {'RIGHTMOUSE', 'ESC'}:
+        if event.type in {'ESC'}:
             self.cancel(context)
             return {'CANCELLED'}
 
