@@ -18,8 +18,6 @@ from bpy.props import (
 )
 from bpy.types import PropertyGroup
 
-from path_utils import get_target_name_from_blend_file, get_target_directory_from_latest_directory
-
 try:
     import render_graph
     import render_manager
@@ -30,14 +28,14 @@ except ImportError:
     render_graph = None
     render_manager = None
     local_processor = None
-    path_utils
+    path_utils = None
     # TODO(mattkeller): find some way to report this in the UI?
     print("Custom imports failed. Set PYTHONPATH to include scripts dir for full functionality.")
 
 bl_info = {
     "name": "DepRender",
-    "author": "Matt Keller <matthew.ed.keller@gmail.com>",
-    "version": (1, 0, 5),
+    "author": "Matt Keller <matthew.ed.keller@gmail.com> and Jon Bedard <bedardjo@gmail.com:>",
+    "version": (1, 0, 6),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
@@ -88,8 +86,10 @@ def generate_render_file(context):
     # select the source for the new target
     blend_file = bpy.data.filepath
     target_directory = path_utils.get_target_root_for_blend_file(blend_file)
+    absolute_project_root = bpy.path.abspath(context.scene.dep_render_settings.project_root)
 
     if target_directory:
+
         render_file = join(target_directory, 'RENDER.json')
 
         # check if the file exists
@@ -101,39 +101,37 @@ def generate_render_file(context):
 
             source_file = relpath(blend_file, target_directory).replace('\\', '/')
 
+            render_file_dict = {'targets': []}
             dependencies = set()
+
+            new_target = {}
             # look for dependencies on rendered outputs of other targets.
             if context.scene.sequence_editor and context.scene.sequence_editor.sequences_all and render_graph:
+
                 for sequence in context.scene.sequence_editor.sequences_all:
                     if not hasattr(sequence, 'directory'):
                         continue
                     sequence_directory = bpy.path.abspath(sequence.directory)
                     # this looks like the output of a target.
                     if basename(dirname(sequence_directory)) == 'latest':
-                        target_root_directory = get_target_directory_from_latest_directory(sequence_directory)
-                        render_file = join(target_root_directory, 'RENDER.py')
-                        if exists(render_file):
-                            render_graph.targets = {}
-                            exec(open(render_file).read())
-                            for key in render_graph.targets.keys():
-                                # there *should* only be one here.
-                                dependencies.add(key)
+                        target = path_utils.get_target_for_latest_image_sequence_directory(absolute_project_root,
+                                                                                           sequence_directory)
+                        dependencies.add(target)
 
-            new_target_name = replace_absolute_project_prefix(context, target_directory) + ':seq'
-            with open(join(target_directory, 'RENDER.py'), 'w') as f:
-                f.write('from render_target import image_sequence\n\n')
-                f.write('image_sequence(\n')
-                f.write('  name = \'' + new_target_name + '\',\n')
-                f.write('  src = \'' + source_file + '\',\n')
-                f.write('  deps = [\n')
-                for dep in dependencies:
-                    f.write('    \'' + dep + '\',\n')
-                f.write('  ],\n')
-                f.write(')\n')
+            new_target_name = path_utils.replace_absolute_project_prefix(absolute_project_root,
+                                                                         target_directory) + ':seq'
+            new_target['name'] = new_target_name
+            new_target['src'] = source_file
+            new_target['deps'] = list(dependencies)
+
+            render_file_dict['targets'].append(new_target)
+            with open(render_file, 'w') as f:
+                # indent=2 pretty prints the json, otherwise it's all on one line.
+                json.dump(render_file_dict, f, indent=2)
 
 
 class RENDER_PT_RenderAsTarget(bpy.types.Operator):
-    """Operator which runs its self from a timer"""
+    """ Render the current blend file, taking into account its dependencies. """
     bl_idname = "deprender.render_target"
     bl_label = "Target"
 
@@ -167,7 +165,7 @@ class RENDER_PT_RenderAsTarget(bpy.types.Operator):
 
         project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
 
-        target = get_target_name_from_blend_file(bpy.data.filepath)
+        target = path_utils.get_target_name_from_blend_file(project_root, bpy.data.filepath)
 
         task_spec = {'target': target}
 
@@ -192,7 +190,7 @@ class RENDER_PT_RenderAsTarget(bpy.types.Operator):
 
 
 class RENDER_PT_RenderAsFile(bpy.types.Operator):
-    """Operator which runs its self from a timer"""
+    """ Render just this file. """
     bl_idname = "deprender.render_file"
     bl_label = "File"
 

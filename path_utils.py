@@ -39,18 +39,15 @@ def get_blend_files_directory_for_target(project_root, target):
     return join(get_directory_for_target(project_root, target), 'blend_files')
 
 
-def get_blend_file_for_target(project_root, target):
-    """
-    This method requires that the target is available in the current render_graph context.
+def get_target_for_latest_image_sequence_directory(project_root, latest_directory):
+    # TODO(mattkeller): this should eventually look at the "renders" subdirectory name to get the name of the target
+    target_root = get_target_directory_from_latest_directory(latest_directory)
 
-    TODO(mattkeller): maybe this should be updated to actually find and execute the RENDER.py file
-                      instead of just hoping that it will available in the render_graph
+    relative_path = replace_absolute_project_prefix(project_root, target_root)
 
-    :param project_root: The directory which all targets are expressed relative to.
-    :param target: The name of the target, starting with the "//".
-    :return: The absolute path to the blend file associated with the target.
-    """
-    return abspath(join(get_directory_for_target(project_root, target), render_graph.targets[target]['src']))
+    # Every target thus far has been named seq. This will be fixed when we move to naming the output directories
+    # according to the target names.
+    return relative_path + ':seq'
 
 
 # Blend file utility methods.
@@ -84,6 +81,10 @@ def get_target_root_for_blend_file(blend_file):
     else:
         return target_root_directory
 
+def get_absolute_blend_file(project_root, target, relative_blend_file):
+    [relative_target_path, _] = target.split(':')
+    absolute_target_path = replace_relative_project_prefix(project_root, relative_target_path)
+    return join(absolute_target_path, relative_blend_file)
 
 def get_render_directory_for_blend_file(blend_file):
     target_root_directory = get_target_root_for_blend_file(blend_file)
@@ -124,20 +125,10 @@ def replace_relative_project_prefix(project_root, target_or_blend_file):
     return path
 
 
-def get_target_name_from_blend_file(blend_file):
-    if not render_graph:
-        return None
-
+def get_target_name_from_blend_file(project_root, blend_file):
     target_directory = get_target_root_for_blend_file(blend_file)
-    render_file = join(target_directory, 'RENDER.py')
-    if not exists(render_file):
-        return None
-
-    render_graph.targets = {}
-    exec(open(render_file).read())
-    for key in render_graph.targets.keys():
-        # there *should* only be one here.
-        return key
+    relative_target_directory = replace_absolute_project_prefix(project_root, target_directory)
+    return ':'.join([relative_target_directory, 'seq'])
 
 
 def get_target_directory_from_latest_directory(latest_directory):

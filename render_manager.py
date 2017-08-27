@@ -2,17 +2,16 @@ import copy
 import json
 import os
 import queue
-
 import time
 from os.path import join
+
+import render_graph
 from path_utils import (
     get_directory_for_target,
     get_latest_image_sequence_directory_for_target,
-    get_blend_file_for_target,
-    replace_absolute_project_prefix
+    replace_absolute_project_prefix,
+    get_absolute_blend_file
 )
-
-import render_graph
 
 
 class RenderManager:
@@ -78,7 +77,11 @@ class RenderManager:
         pass
 
 
-def get_blend_file_task_linearized_dag_from_target_task(project_root, target_task):
+def get_blend_file_task_linearized_dag_from_target_task(project_root, target_task, graph=None):
+    rg = graph
+    if rg is None:
+        rg = render_graph.RenderGraph()
+
     assert 'target' in target_task
     target = target_task['target']
 
@@ -86,28 +89,28 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
     del new_task_template['target']
 
     absolute_target_directory = get_directory_for_target(project_root, target)
-    render_file = join(absolute_target_directory, 'RENDER.py')
-    exec(open(render_file).read())
+    render_file = join(absolute_target_directory, 'RENDER.json')
+    rg.add_targets(project_root, render_file)
     blend_files = []
-    if 'deps' in render_graph.targets[target] and render_graph.targets[target]['deps']:
-        for dep_target in render_graph.targets[target]['deps']:
-            dep_task = copy.copy(new_task_template)
-            dep_task['target'] = dep_target
-            blend_files.extend(get_blend_file_task_linearized_dag_from_target_task(project_root, dep_task))
+    for dep_target in rg.get_deps_for_target(target):
+        dep_task = copy.copy(new_task_template)
+        dep_task['target'] = dep_target
+        blend_files.extend(get_blend_file_task_linearized_dag_from_target_task(project_root, dep_task, rg))
 
     # basically, if the blend file has changed or any of this blend files dependencies have declared that
     # they need to be rerendered we rerender this file.
 
-    if needs_rerender(project_root, target) or blend_files:
+    if needs_rerender(project_root, rg, target) or blend_files:
         new_task = copy.copy(new_task_template)
-        absolute_blend_file = get_blend_file_for_target(project_root, target)
+        absolute_blend_file = get_absolute_blend_file(project_root, target, rg.get_blend_file_for_target(target))
         new_task['blend_file'] = replace_absolute_project_prefix(project_root, absolute_blend_file)
         blend_files.append(new_task)
     return blend_files
 
 
-def needs_rerender(project_root, target):
-    blend_file_mtime = os.path.getmtime(get_blend_file_for_target(project_root, target))
+def needs_rerender(project_root, rg, target):
+    blend_file_mtime = os.path.getmtime(
+        get_absolute_blend_file(project_root, target, rg.get_blend_file_for_target(target)))
     latest_image_sequence_directory = get_latest_image_sequence_directory_for_target(project_root, target)
     done_file = join(latest_image_sequence_directory, 'DONE.json')
 
