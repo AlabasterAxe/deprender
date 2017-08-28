@@ -1,7 +1,6 @@
 """ Utilities for working with blend files, target paths, etc."""
 import os
-import sys
-from os.path import join, dirname, abspath
+from os.path import join, dirname, abspath, basename
 
 
 # Target utility methods
@@ -11,8 +10,7 @@ def get_directory_for_target(project_root, target):
     try:
         [target_prefix, _] = target.split(':')
     except ValueError:
-        print('Invalid target name. Too many colons?')
-        sys.exit(1)
+        raise ValueError('Invalid target name: %s. Too many colons?' % target)
     assert target_prefix.startswith('//')
     stripped_target_prefix = target_prefix.replace('//', '')
 
@@ -44,14 +42,14 @@ def get_blend_files_directory_for_target(project_root, target):
 
 
 def get_target_for_latest_image_sequence_directory(project_root, latest_directory):
-    # TODO(mattkeller): this should eventually look at the "renders" subdirectory name to get the name of the target
+    image_sequence_directory = dirname(dirname(latest_directory))
+    target_render_directory = dirname(image_sequence_directory)
+    target_name = basename(target_render_directory)
     target_root = get_target_directory_from_latest_directory(latest_directory)
 
     relative_path = replace_absolute_project_prefix(project_root, target_root)
 
-    # Every target thus far has been named seq. This will be fixed when we move to naming the output directories
-    # according to the target names.
-    return relative_path + ':seq'
+    return ':'.join([relative_path, target_name])
 
 
 # Blend file utility methods.
@@ -109,13 +107,16 @@ def replace_relative_project_prefix(project_root, target_or_blend_file):
 
 def get_target_name_from_blend_file(project_root, blend_file):
     target_directory = get_target_root_for_blend_file(blend_file)
+    blend_file_name = os.path.basename(blend_file)
+    (extensionless_blend_file, _) = os.path.splitext(blend_file_name)
     relative_target_directory = replace_absolute_project_prefix(project_root, target_directory)
-    return ':'.join([relative_target_directory, 'seq'])
+    return ':'.join([relative_target_directory, extensionless_blend_file])
 
 
 def get_target_directory_from_latest_directory(latest_directory):
     if latest_directory.endswith('\\'):
         latest_directory = dirname(latest_directory)
     image_sequences_directory = dirname(latest_directory)
-    renders_directory = dirname(image_sequences_directory)
+    target_name_directory = dirname(image_sequences_directory)
+    renders_directory = dirname(target_name_directory)
     return dirname(renders_directory)

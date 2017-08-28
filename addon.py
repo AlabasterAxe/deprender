@@ -35,7 +35,7 @@ except ImportError:
 bl_info = {
     "name": "DepRender",
     "author": "Matt Keller <matthew.ed.keller@gmail.com> and Jon Bedard <bedardjo@gmail.com:>",
-    "version": (1, 0, 6),
+    "version": (1, 0, 8),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
@@ -76,12 +76,6 @@ class DepRenderPanel(bpy.types.Panel):
         row.prop(settings, "render_strategy", expand=True)
 
 
-def replace_absolute_project_prefix(context, target_or_blend_file):
-    """Convenience method to grab the project root from the context, then call the common method."""
-    absolute_project_root = bpy.path.abspath(context.scene.dep_render_settings.project_root)
-    return path_utils.replace_absolute_project_prefix(absolute_project_root, target_or_blend_file)
-
-
 def generate_render_file(context):
     # select the source for the new target
     blend_file = bpy.data.filepath
@@ -91,43 +85,66 @@ def generate_render_file(context):
     if target_directory:
 
         render_file = join(target_directory, 'RENDER.json')
+        source_file = relpath(blend_file, target_directory).replace('\\', '/')
 
         # check if the file exists
         #     if so parse it as json.
         #     check if the target for this blend file exists (how do I do that?)
         #         if so update the dependencies and assets (eventually...)
         #
-        if not exists(render_file) and target_directory:
-
-            source_file = relpath(blend_file, target_directory).replace('\\', '/')
-
+        if exists(render_file):
+            with open(render_file, 'r') as f:
+                render_file_dict = json.load(f)
+        else:
             render_file_dict = {'targets': []}
-            dependencies = set()
 
-            new_target = {}
-            # look for dependencies on rendered outputs of other targets.
-            if context.scene.sequence_editor and context.scene.sequence_editor.sequences_all and render_graph:
+        # We look through the existing targets in the file to see if this blend file is already represented.
+        this_target = None
+        if 'targets' in render_file_dict:
+            for target in render_file_dict['targets']:
+                if 'src' in target and target['src'] == source_file:
+                    this_target = target
+            if this_target is not None:
+                render_file_dict['targets'].remove(this_target)
 
-                for sequence in context.scene.sequence_editor.sequences_all:
-                    if not hasattr(sequence, 'directory'):
-                        continue
-                    sequence_directory = bpy.path.abspath(sequence.directory)
-                    # this looks like the output of a target.
-                    if basename(dirname(sequence_directory)) == 'latest':
-                        target = path_utils.get_target_for_latest_image_sequence_directory(absolute_project_root,
-                                                                                           sequence_directory)
-                        dependencies.add(target)
+        # If we haven't found the target we setup a new one.
+        if this_target is None:
+            (new_target_name, _) = os.path.splitext(basename(source_file))
+            this_target = {
+                'src': source_file,
+                'name': new_target_name
+            }
 
-            new_target_name = path_utils.replace_absolute_project_prefix(absolute_project_root,
-                                                                         target_directory) + ':seq'
-            new_target['name'] = new_target_name
-            new_target['src'] = source_file
-            new_target['deps'] = list(dependencies)
+        # We start with a clean slate in terms of determining dependencies.
+        dependencies = set()
 
-            render_file_dict['targets'].append(new_target)
-            with open(render_file, 'w') as f:
-                # indent=2 pretty prints the json, otherwise it's all on one line.
-                json.dump(render_file_dict, f, indent=2)
+        # look for dependencies on rendered outputs of other targets.
+        if context.scene.sequence_editor and context.scene.sequence_editor.sequences_all and render_graph:
+
+            for sequence in context.scene.sequence_editor.sequences_all:
+                if not hasattr(sequence, 'directory'):
+                    continue
+                sequence_directory = bpy.path.abspath(sequence.directory)
+                # this looks like the output of a target.
+                if basename(dirname(sequence_directory)) == 'latest':
+                    target = path_utils.get_target_for_latest_image_sequence_directory(absolute_project_root,
+                                                                                       sequence_directory)
+                    dependencies.add(target)
+
+        this_target['deps'] = list(dependencies)
+
+        render_file_dict['targets'].append(this_target)
+        with open(render_file, 'w') as f:
+            # indent=2 pretty prints the json, otherwise it's all on one line.
+            json.dump(render_file_dict, f, indent=2)
+
+        if this_target['name'].startswith('//'):
+            full_target = this_target['name']
+        else:
+            full_target = ':'.join([path_utils.replace_absolute_project_prefix(absolute_project_root, target_directory),
+                                    this_target['name']])
+        print(full_target)
+        return full_target
 
 
 class RENDER_PT_RenderAsTarget(bpy.types.Operator):
@@ -161,13 +178,11 @@ class RENDER_PT_RenderAsTarget(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
-        generate_render_file(context)
+        full_target = generate_render_file(context)
 
         project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
 
-        target = path_utils.get_target_name_from_blend_file(project_root, bpy.data.filepath)
-
-        task_spec = {'target': target, 'dependency_invalidation_types': ['FILE_MODIFICATION_TIME']}
+        task_spec = {'target': full_target, 'dependency_invalidation_types': ['FILE_MODIFICATION_TIME']}
 
         if context.scene.dep_render_settings.render_strategy == 'distributed':
             new_render_task_file = join(project_root, RELATIVE_RENDER_TASKS_DIRECTORY,
@@ -220,14 +235,12 @@ class RENDER_PT_RenderAsFile(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
-        generate_render_file(context)
+        full_target = generate_render_file(context)
 
         project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
 
-        target = path_utils.get_target_name_from_blend_file(project_root, bpy.data.filepath)
-
         # An empty dependency_invalidation_types list indicates that just this target should be rendered
-        task_spec = {'target': target, 'dependency_invalidation_types': []}
+        task_spec = {'target': full_target, 'dependency_invalidation_types': []}
 
         if context.scene.dep_render_settings.render_strategy == 'distributed':
             new_render_task_file = join(project_root, RELATIVE_RENDER_TASKS_DIRECTORY,

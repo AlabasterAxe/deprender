@@ -1,5 +1,4 @@
 import json
-
 from os.path import dirname
 
 import path_utils
@@ -7,7 +6,6 @@ import path_utils
 
 # Class to represent the dependencies of rendering a target.
 class RenderGraph:
-
     def __init__(self):
         self.targets = {}
 

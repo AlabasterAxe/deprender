@@ -76,7 +76,8 @@ class LocalProcessor:
             if os.path.exists(completion_metadata_file):
                 with open(completion_metadata_file, 'r') as f:
                     completion_metadata = json.load(f)
-                    new_directory_name = time.strftime("%Y-%m-%d_%H-%M-%S", time.gmtime(completion_metadata['start_time']))
+                    new_directory_name = time.strftime("%Y-%m-%d_%H-%M-%S",
+                                                       time.gmtime(completion_metadata['start_time']))
             elif os.path.exists(in_progress_metadata_file):
                 with open(in_progress_metadata_file, 'r') as f:
                     in_progress_metadata = json.load(f)
@@ -87,9 +88,10 @@ class LocalProcessor:
 
             image_sequence_directory = os.path.dirname(output_directory)
             old_render_directory = join(image_sequence_directory, new_directory_name)
-            os.makedirs(old_render_directory)
-            for file in os.listdir(output_directory):
-                os.rename(join(output_directory, file), join(old_render_directory, file))
+            if not os.path.exists(old_render_directory):
+                os.makedirs(old_render_directory)
+                for file in os.listdir(output_directory):
+                    os.rename(join(output_directory, file), join(old_render_directory, file))
         else:
             os.makedirs(output_directory)
 
@@ -109,20 +111,12 @@ class LocalProcessor:
             json.dump({
                 'start_time': start_time,
                 'task_spec': task_spec,
-            }, f)
+            }, f, indent=2)
 
         print(blend_file)
         assert os.path.exists(blend_file)
 
         # Actually execute the render
-        print([
-            'blender',
-            '-b',  # run in the background
-            blend_file,  # render this file
-            '-P', custom_settings_script,
-            '-o', output_format,  # output the results in this format
-            '-a',  # render the animation from start frame to end frame, inclusive
-        ])
         return Popen([
             'blender',
             '-b',  # run in the background
@@ -170,8 +164,8 @@ def finalize_blend_file_render(project_root, task_spec, returncode):
 
     if not returncode:
         with open(completion_indicator_file, 'w') as f:
-            json.dump(done_dict, f)
+            json.dump(done_dict, f, indent=2)
     else:
         done_dict['error_code'] = returncode
         with open(error_indicator_file, 'w') as f:
-            json.dump(done_dict, f)
+            json.dump(done_dict, f, indent=2)
