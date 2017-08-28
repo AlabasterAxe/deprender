@@ -67,7 +67,12 @@ def process_blend_file(project_root, task_spec):
     assert 'blend_file' in task_spec
     blend_file = join(project_root, os.path.normpath(task_spec['blend_file'].replace('//', '')))
     start_time = time.time()
-    output_directory = get_latest_image_sequence_directory_for_blend_file(blend_file)
+
+    if 'output_directory' in task_spec:
+        output_directory = task_spec['output_directory']
+    else:
+        raise ValueError('output_directory not specified for blend_file task spec')
+
     if os.path.exists(output_directory) and os.listdir(output_directory):
         completion_metadata_file = join(output_directory, 'DONE.json')
         if os.path.exists(completion_metadata_file):
@@ -121,9 +126,12 @@ def process_blend_file(project_root, task_spec):
 # this method should be called once the render to update the status files:
 def finalize_blend_file_render(project_root, task_spec, returncode):
     absolute_blend_file = replace_relative_project_prefix(project_root, task_spec['blend_file'])
-    print('absolute_blend_file: ')
-    print(absolute_blend_file)
-    output_directory = get_latest_image_sequence_directory_for_blend_file(absolute_blend_file)
+
+    if 'output_directory' in task_spec:
+        output_directory = task_spec['output_directory']
+    else:
+        raise ValueError('output_directory not specified for blend_file task spec')
+
 
     # Maybe this should all just be in one STATUS.json file?
     completion_indicator_file = join(output_directory, 'DONE.json')

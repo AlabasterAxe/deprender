@@ -98,12 +98,13 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
         blend_files.extend(get_blend_file_task_linearized_dag_from_target_task(project_root, dep_task, rg))
 
     # basically, if the blend file has changed or any of this blend files dependencies have declared that
-    # they need to be rerendered we rerender this file.
+    # they need to be rerendered, we rerender this file.
 
     if needs_rerender(project_root, rg, target) or blend_files:
         new_task = copy.copy(new_task_template)
         absolute_blend_file = get_absolute_blend_file(project_root, target, rg.get_blend_file_for_target(target))
         new_task['blend_file'] = replace_absolute_project_prefix(project_root, absolute_blend_file)
+        new_task['output_directory'] = get_latest_image_sequence_directory_for_target(project_root, target)
         blend_files.append(new_task)
     return blend_files
 

@@ -1,10 +1,7 @@
 """ Utilities for working with blend files, target paths, etc."""
 import os
 import sys
-from genericpath import exists
 from os.path import join, dirname, abspath
-
-import render_graph
 
 
 # Target utility methods
@@ -24,7 +21,14 @@ def get_directory_for_target(project_root, target):
 
 
 def get_render_directory_for_target(project_root, target):
-    return join(get_directory_for_target(project_root, target), 'renders')
+    """
+
+    :param project_root: the root directory for the whole project.
+    :param target: A full target spec (e.g. "//some/path:target_name")
+    :return: The absolute path to the render directory for the target.
+    """
+    [_, target_name] = target.split(":")
+    return join(get_directory_for_target(project_root, target), 'renders', target_name)
 
 
 def get_image_sequence_directory_for_target(project_root, target):
@@ -81,10 +85,12 @@ def get_target_root_for_blend_file(blend_file):
     else:
         return target_root_directory
 
+
 def get_absolute_blend_file(project_root, target, relative_blend_file):
     [relative_target_path, _] = target.split(':')
     absolute_target_path = replace_relative_project_prefix(project_root, relative_target_path)
     return join(absolute_target_path, relative_blend_file)
+
 
 def get_render_directory_for_blend_file(blend_file):
     target_root_directory = get_target_root_for_blend_file(blend_file)
