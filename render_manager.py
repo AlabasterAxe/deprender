@@ -85,6 +85,14 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
     assert 'target' in target_task
     target = target_task['target']
 
+    # forgive the overly verbose name.
+    # this is the set of reasons why a dependency will be rerendered
+    # this should be a list of strings.
+    #
+    # An empty list means that we won't rerender our dependencies
+
+    dependency_invalidation_types = target_task['dependency_invalidation_types']
+
     new_task_template = copy.copy(target_task)
     del new_task_template['target']
 
@@ -92,19 +100,25 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
     render_file = join(absolute_target_directory, 'RENDER.json')
     rg.add_targets(project_root, render_file)
     blend_files = []
-    for dep_target in rg.get_deps_for_target(target):
-        dep_task = copy.copy(new_task_template)
-        dep_task['target'] = dep_target
-        blend_files.extend(get_blend_file_task_linearized_dag_from_target_task(project_root, dep_task, rg))
 
-    # basically, if the blend file has changed or any of this blend files dependencies have declared that
-    # they need to be rerendered, we rerender this file.
+    if dependency_invalidation_types:
+        for dep_target in rg.get_deps_for_target(target):
+            dep_task = copy.copy(new_task_template)
+            dep_task['target'] = dep_target
+            blend_files.extend(get_blend_file_task_linearized_dag_from_target_task(project_root, dep_task, rg))
 
-    if needs_rerender(project_root, rg, target) or blend_files:
+    # Basically, there are three reasons we'll rerender the blend file:
+    #  - the source blend file for the target has changed since the start time of the latest render
+    #  - any of this blend files dependencies have declared that they need to be rerendered (indicated by returning us
+    #    a list of blender file tasks)
+    #  - the dependency_invalidation_types list is empty (indicating a fast rerender requested)
+
+    if needs_rerender(project_root, rg, target) or blend_files or not dependency_invalidation_types:
         new_task = copy.copy(new_task_template)
         absolute_blend_file = get_absolute_blend_file(project_root, target, rg.get_blend_file_for_target(target))
         new_task['blend_file'] = replace_absolute_project_prefix(project_root, absolute_blend_file)
-        new_task['output_directory'] = get_latest_image_sequence_directory_for_target(project_root, target)
+        absolute_output_directory = get_latest_image_sequence_directory_for_target(project_root, target)
+        new_task['output_directory'] = replace_absolute_project_prefix(project_root, absolute_output_directory)
         blend_files.append(new_task)
     return blend_files
 

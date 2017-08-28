@@ -167,7 +167,7 @@ class RENDER_PT_RenderAsTarget(bpy.types.Operator):
 
         target = path_utils.get_target_name_from_blend_file(project_root, bpy.data.filepath)
 
-        task_spec = {'target': target}
+        task_spec = {'target': target, 'dependency_invalidation_types': ['FILE_MODIFICATION_TIME']}
 
         if context.scene.dep_render_settings.render_strategy == 'distributed':
             new_render_task_file = join(project_root, RELATIVE_RENDER_TASKS_DIRECTORY,
@@ -224,9 +224,10 @@ class RENDER_PT_RenderAsFile(bpy.types.Operator):
 
         project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
 
-        relative_blend_file = replace_absolute_project_prefix(context, bpy.data.filepath)
+        target = path_utils.get_target_name_from_blend_file(project_root, bpy.data.filepath)
 
-        task_spec = {'blend_file': relative_blend_file}
+        # An empty dependency_invalidation_types list indicates that just this target should be rendered
+        task_spec = {'target': target, 'dependency_invalidation_types': []}
 
         if context.scene.dep_render_settings.render_strategy == 'distributed':
             new_render_task_file = join(project_root, RELATIVE_RENDER_TASKS_DIRECTORY,

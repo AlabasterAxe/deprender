@@ -92,30 +92,6 @@ def get_absolute_blend_file(project_root, target, relative_blend_file):
     return join(absolute_target_path, relative_blend_file)
 
 
-def get_render_directory_for_blend_file(blend_file):
-    target_root_directory = get_target_root_for_blend_file(blend_file)
-    if target_root_directory:
-        return join(target_root_directory, 'renders')
-    else:
-        return None
-
-
-def get_image_sequence_directory_for_blend_file(blend_file):
-    render_directory = get_render_directory_for_blend_file(blend_file)
-    if render_directory:
-        return join(render_directory, 'image_sequences')
-    else:
-        return None
-
-
-def get_latest_image_sequence_directory_for_blend_file(blend_file):
-    image_sequence_directory = get_image_sequence_directory_for_blend_file(blend_file)
-    if image_sequence_directory:
-        return join(image_sequence_directory, 'latest')
-    else:
-        return None
-
-
 # Project root utility methods.
 
 

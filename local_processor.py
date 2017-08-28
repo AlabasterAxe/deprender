@@ -5,8 +5,6 @@ from os.path import join
 from subprocess import Popen
 
 from path_utils import (
-    get_image_sequence_directory_for_blend_file,
-    get_latest_image_sequence_directory_for_blend_file,
     replace_relative_project_prefix
 )
 
@@ -51,7 +49,7 @@ class LocalProcessor:
         if 'blend_file' not in task_spec:
             raise ValueError('Please specify a blend_file to render.')
 
-        subprocess = process_blend_file(self.project_root, task_spec)
+        subprocess = self._process_blend_file(task_spec)
         self.current_task = SubprocessStatus(self.project_root, task_spec, subprocess)
         return self.current_task
 
@@ -62,76 +60,88 @@ class LocalProcessor:
             return True
         return False
 
+    def _process_blend_file(self, task_spec):
+        assert 'blend_file' in task_spec
+        blend_file = replace_relative_project_prefix(self.project_root, task_spec['blend_file'])
+        start_time = time.time()
 
-def process_blend_file(project_root, task_spec):
-    assert 'blend_file' in task_spec
-    blend_file = join(project_root, os.path.normpath(task_spec['blend_file'].replace('//', '')))
-    start_time = time.time()
-
-    if 'output_directory' in task_spec:
-        output_directory = task_spec['output_directory']
-    else:
-        raise ValueError('output_directory not specified for blend_file task spec')
-
-    if os.path.exists(output_directory) and os.listdir(output_directory):
-        completion_metadata_file = join(output_directory, 'DONE.json')
-        if os.path.exists(completion_metadata_file):
-            with open(completion_metadata_file, 'r') as f:
-                completion_metadata = json.load(f)
-                new_directory_name = time.strftime("%Y-%m-%d_%H-%M-%S", time.gmtime(completion_metadata['start_time']))
+        if 'output_directory' in task_spec:
+            output_directory = replace_relative_project_prefix(self.project_root, task_spec['output_directory'])
         else:
-            # TODO(mattkeller): we should be able to grab the start time from the IN_PROGRESS.json file.
-            #                   IMO we should better reflect that this was an incomplete render in the directory name
-            #                   replaced_* doesn't really indicate much.
-            new_directory_name = "replaced_" + time.strftime("%Y-%m-%d_%H-%M-%S", time.gmtime())
-        old_render_directory = join(get_image_sequence_directory_for_blend_file(blend_file), new_directory_name)
-        os.makedirs(old_render_directory)
-        for file in os.listdir(output_directory):
-            os.rename(join(output_directory, file), join(old_render_directory, file))
-    else:
-        os.makedirs(output_directory)
+            raise ValueError('output_directory not specified for blend_file task spec')
 
-    output_format = join(output_directory, 'frame_#####')
+        if os.path.exists(output_directory) and os.listdir(output_directory):
+            completion_metadata_file = join(output_directory, 'DONE.json')
+            in_progress_metadata_file = join(output_directory, 'IN_PROGRESS.json')
+            if os.path.exists(completion_metadata_file):
+                with open(completion_metadata_file, 'r') as f:
+                    completion_metadata = json.load(f)
+                    new_directory_name = time.strftime("%Y-%m-%d_%H-%M-%S", time.gmtime(completion_metadata['start_time']))
+            elif os.path.exists(in_progress_metadata_file):
+                with open(in_progress_metadata_file, 'r') as f:
+                    in_progress_metadata = json.load(f)
+                    new_directory_name = time.strftime("%Y-%m-%d_%H-%M-%S_INCOMPLETE",
+                                                       time.gmtime(in_progress_metadata['start_time']))
+            else:
+                new_directory_name = time.strftime("%Y-%m-%d_%H-%M-%S_UNKNOWN_STATUS", time.gmtime())
 
-    custom_settings_script = join(output_directory, 'settings.py')
+            image_sequence_directory = os.path.dirname(output_directory)
+            old_render_directory = join(image_sequence_directory, new_directory_name)
+            os.makedirs(old_render_directory)
+            for file in os.listdir(output_directory):
+                os.rename(join(output_directory, file), join(old_render_directory, file))
+        else:
+            os.makedirs(output_directory)
 
-    with open(custom_settings_script, 'w') as f:
-        f.write("import bpy\n\n")
-        if 'resolution_x' in task_spec:
-            f.write('bpy.context.scene.render.resolution_x = ' + str(task_spec['resolution_x']) + '\n')
-        if 'resolution_y' in task_spec:
-            f.write('bpy.context.scene.render.resolution_y = ' + str(task_spec['resolution_y']) + '\n')
+        output_format = join(output_directory, 'frame_#####')
 
-    status_indicator = join(output_directory, 'IN_PROGRESS.json')
-    with open(status_indicator, 'w') as f:
-        json.dump({
-            'start_time': start_time,
-            'task_spec': task_spec,
-        }, f)
+        custom_settings_script = join(output_directory, 'settings.py')
 
-    print(blend_file)
-    assert os.path.exists(blend_file)
+        with open(custom_settings_script, 'w') as f:
+            f.write("import bpy\n\n")
+            if 'resolution_x' in task_spec:
+                f.write('bpy.context.scene.render.resolution_x = ' + str(task_spec['resolution_x']) + '\n')
+            if 'resolution_y' in task_spec:
+                f.write('bpy.context.scene.render.resolution_y = ' + str(task_spec['resolution_y']) + '\n')
 
-    # Actually execute the render
-    return Popen([
-        'blender',
-        '-b',  # run in the background
-        blend_file,  # render this file
-        '-P', custom_settings_script,
-        '-o', output_format,  # output the results in this format
-        '-a',  # render the animation from start frame to end frame, inclusive
-    ])
+        status_indicator = join(output_directory, 'IN_PROGRESS.json')
+        with open(status_indicator, 'w') as f:
+            json.dump({
+                'start_time': start_time,
+                'task_spec': task_spec,
+            }, f)
+
+        print(blend_file)
+        assert os.path.exists(blend_file)
+
+        # Actually execute the render
+        print([
+            'blender',
+            '-b',  # run in the background
+            blend_file,  # render this file
+            '-P', custom_settings_script,
+            '-o', output_format,  # output the results in this format
+            '-a',  # render the animation from start frame to end frame, inclusive
+        ])
+        return Popen([
+            'blender',
+            '-b',  # run in the background
+            blend_file,  # render this file
+            '-P', custom_settings_script,
+            '-o', output_format,  # output the results in this format
+            '-a',  # render the animation from start frame to end frame, inclusive
+        ])
 
 
 # this method should be called once the render to update the status files:
+# TODO(mattkeller): maybe this should be moved to the SubprocessStatus class?
 def finalize_blend_file_render(project_root, task_spec, returncode):
     absolute_blend_file = replace_relative_project_prefix(project_root, task_spec['blend_file'])
 
     if 'output_directory' in task_spec:
-        output_directory = task_spec['output_directory']
+        output_directory = replace_relative_project_prefix(project_root, task_spec['output_directory'])
     else:
         raise ValueError('output_directory not specified for blend_file task spec')
-
 
     # Maybe this should all just be in one STATUS.json file?
     completion_indicator_file = join(output_directory, 'DONE.json')
