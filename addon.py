@@ -245,7 +245,12 @@ class RENDER_PT_RenderAsFile(bpy.types.Operator):
         project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
 
         # An empty dependency_invalidation_types list indicates that just this target should be rendered
-        task_spec = {'target': full_target, 'dependency_invalidation_types': []}
+        task_spec = {
+          'target': full_target,
+          'dependency_invalidation_types': [],
+          'resolution_x': bpy.context.scene.render.resolution_x,
+          'resolution_y': bpy.context.scene.render.resolution_y
+        }
 
         if context.scene.dep_render_settings.render_strategy == 'distributed':
             new_render_task_file = join(project_root, RELATIVE_RENDER_TASKS_DIRECTORY,
