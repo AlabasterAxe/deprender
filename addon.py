@@ -35,7 +35,7 @@ except ImportError:
 bl_info = {
     "name": "DepRender",
     "author": "Matt Keller <matthew.ed.keller@gmail.com> and Jon Bedard <bedardjo@gmail.com:>",
-    "version": (1, 0, 8),
+    "version": (1, 0, 9),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
@@ -157,22 +157,25 @@ class RENDER_PT_RenderAsTarget(bpy.types.Operator):
     rm = None
 
     def modal(self, context, event):
-        if event.type in {'RIGHTMOUSE', 'ESC'}:
+        if event.type in {'ESC'}:
             self.cancel(context)
             return {'CANCELLED'}
 
         if event.type == 'TIMER':
             if not self.rm.is_done():
                 self.rm.launch_next_tasks()
+                context.window_manager.progress_update(50)
             else:
                 wm = context.window_manager
                 wm.event_timer_remove(self._timer)
+                wm.progress_end()
                 return {'FINISHED'}
 
         return {'PASS_THROUGH'}
 
     def execute(self, context):
         wm = context.window_manager
+        wm.progress_begin(0, 100)
         self._timer = wm.event_timer_add(0.1, context.window)
         wm.modal_handler_add(self)
         return {'RUNNING_MODAL'}
@@ -205,7 +208,9 @@ class RENDER_PT_RenderAsTarget(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def cancel(self, context):
+        self.rm.cancel()
         wm = context.window_manager
+        wm.progress_end()
         wm.event_timer_remove(self._timer)
 
 
@@ -226,9 +231,11 @@ class RENDER_PT_RenderAsFile(bpy.types.Operator):
         if event.type == 'TIMER':
             if not self.rm.is_done():
                 self.rm.launch_next_tasks()
+                context.window_manager.progress_update(50)
             else:
                 wm = context.window_manager
                 wm.event_timer_remove(self._timer)
+                wm.progress_end()
                 return {'FINISHED'}
 
         return {'PASS_THROUGH'}
@@ -236,6 +243,7 @@ class RENDER_PT_RenderAsFile(bpy.types.Operator):
     def execute(self, context):
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, context.window)
+        wm.progress_begin(0, 100)
         wm.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
@@ -268,7 +276,9 @@ class RENDER_PT_RenderAsFile(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def cancel(self, context):
+        self.rm.cancel()
         wm = context.window_manager
+        wm.progress_end()
         wm.event_timer_remove(self._timer)
 
 

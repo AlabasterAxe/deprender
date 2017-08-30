@@ -76,6 +76,10 @@ class RenderManager:
     def status(self):
         pass
 
+    def cancel(self):
+        for status in self.current_task_statuses:
+            status.cancel()
+
 
 def get_blend_file_task_linearized_dag_from_target_task(project_root, target_task, graph=None):
     rg = graph

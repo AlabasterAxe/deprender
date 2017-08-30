@@ -35,6 +35,9 @@ class SubprocessStatus:
         assert self.is_done()
         finalize_blend_file_render(self.project_root, self.task_spec, self.returncode)
 
+    def cancel(self):
+        self.process.terminate()
+
 
 class LocalProcessor:
     def __init__(self, project_root):
