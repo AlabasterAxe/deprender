@@ -84,17 +84,24 @@ class LocalProcessor:
             elif os.path.exists(in_progress_metadata_file):
                 with open(in_progress_metadata_file, 'r') as f:
                     in_progress_metadata = json.load(f)
-                    new_directory_name = time.strftime("%Y-%m-%d_%H-%M-%S_INCOMPLETE",
-                                                       time.gmtime(in_progress_metadata['start_time']))
+                    if 'dependency_invalidation_types' in task_spec and 'IN_PROGRESS_RENDER' in task_spec['dependency_invalidation_types']:
+                        new_directory_name = time.strftime("%Y-%m-%d_%H-%M-%S_INCOMPLETE",
+                                                           time.gmtime(in_progress_metadata['start_time']))
+                    else:
+                        new_directory_name = None
             else:
                 new_directory_name = time.strftime("%Y-%m-%d_%H-%M-%S_UNKNOWN_STATUS", time.gmtime())
 
-            image_sequence_directory = os.path.dirname(output_directory)
-            old_render_directory = join(image_sequence_directory, new_directory_name)
-            if not os.path.exists(old_render_directory):
-                os.makedirs(old_render_directory)
-                for file in os.listdir(output_directory):
-                    os.rename(join(output_directory, file), join(old_render_directory, file))
+            # we take new_directory_name being set to None to mean that we should not move the contents
+            # for example, in the case when we want to resume a render.
+            if new_directory_name is not None:
+                image_sequence_directory = os.path.dirname(output_directory)
+                old_render_directory = join(image_sequence_directory, new_directory_name)
+                if not os.path.exists(old_render_directory):
+                    os.makedirs(old_render_directory)
+                    for file in os.listdir(output_directory):
+                        os.rename(join(output_directory, file), join(old_render_directory, file))
+
         else:
             os.makedirs(output_directory)
 
@@ -104,6 +111,7 @@ class LocalProcessor:
 
         with open(custom_settings_script, 'w') as f:
             f.write("import bpy\n\n")
+            f.write('bpy.context.scene.render.use_overwrite = False\n')
             if 'resolution_x' in task_spec:
                 f.write('bpy.context.scene.render.resolution_x = ' + str(task_spec['resolution_x']) + '\n')
             if 'resolution_y' in task_spec:
