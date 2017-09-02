@@ -42,7 +42,10 @@ def get_blend_files_directory_for_target(project_root, target):
 
 
 def get_target_for_latest_image_sequence_directory(project_root, latest_directory):
-    image_sequence_directory = dirname(dirname(latest_directory))
+    if basename(latest_directory) == "":
+        image_sequence_directory = dirname(dirname(latest_directory))
+    else:
+        image_sequence_directory = dirname(latest_directory)
     target_render_directory = dirname(image_sequence_directory)
     target_name = basename(target_render_directory)
     target_root = get_target_directory_from_latest_directory(latest_directory)

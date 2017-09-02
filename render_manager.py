@@ -10,8 +10,8 @@ from path_utils import (
     get_directory_for_target,
     get_latest_image_sequence_directory_for_target,
     replace_absolute_project_prefix,
-    get_absolute_blend_file
-)
+    get_absolute_blend_file,
+    replace_relative_project_prefix)
 
 
 class RenderManager:
@@ -128,8 +128,14 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
 
 
 def needs_rerender(project_root, rg, target):
+
     blend_file_mtime = os.path.getmtime(
         get_absolute_blend_file(project_root, target, rg.get_blend_file_for_target(target)))
+
+    relevant_mtimes = [blend_file_mtime]
+    for asset in rg.get_assets_for_target(target):
+        relevant_mtimes.append(os.path.getmtime(replace_relative_project_prefix(project_root, asset)))
+
     latest_image_sequence_directory = get_latest_image_sequence_directory_for_target(project_root, target)
     done_file = join(latest_image_sequence_directory, 'DONE.json')
 
@@ -142,4 +148,4 @@ def needs_rerender(project_root, rg, target):
 
         latest_render = completion_metadata_file['start_time']
 
-    return latest_render < blend_file_mtime
+    return latest_render < max(relevant_mtimes)

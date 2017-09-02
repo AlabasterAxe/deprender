@@ -19,13 +19,11 @@ from bpy.props import (
 from bpy.types import PropertyGroup
 
 try:
-    import render_graph
     import render_manager
     import local_processor
     import path_utils
 except ImportError:
     # Initialize these so we can test against them.
-    render_graph = None
     render_manager = None
     local_processor = None
     path_utils = None
@@ -35,7 +33,7 @@ except ImportError:
 bl_info = {
     "name": "DepRender",
     "author": "Matt Keller <matthew.ed.keller@gmail.com> and Jon Bedard <bedardjo@gmail.com:>",
-    "version": (1, 0, 13),
+    "version": (1, 0, 15),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
@@ -75,6 +73,50 @@ class DepRenderPanel(bpy.types.Panel):
         row.label(text="Strategy:")
         row.prop(settings, "render_strategy", expand=True)
 
+
+def evaluate_references(project_root):
+    """ This method handles the evaluation of the current blend file to determine which files or targets affect the
+        outcome of the render.
+
+        :returns a two-element tuple of (assets, dependencies) each of which are sets of strings. containing the
+                 dependent files or targets respectively expressed relative to the project root.
+    """
+
+    external_files = set()
+
+    simple_entities = [
+        bpy.data.images,
+        bpy.data.libraries,
+        bpy.data.sounds,
+    ]
+
+    for entity_type in simple_entities:
+        for entity in entity_type:
+            external_files.add(entity.filepath)
+
+    for scene in bpy.data.scenes:
+        if scene.sequence_editor and scene.sequence_editor.sequences_all:
+            for seq in scene.sequence_editor.sequences_all:
+                if seq.type == 'IMAGE' and hasattr(seq, 'directory'):
+                    directory = seq.directory
+                    for element in seq.elements:
+                        external_files.add(join(directory, element.filename))
+                elif seq.type == 'MOVIE':
+                    external_files.add(seq.filepath)
+
+    assets = set()
+    dependencies = set()
+
+    for file in sorted(external_files):
+        absolute_file = os.path.abspath(bpy.path.abspath(file))
+        absolute_file_directory = dirname(absolute_file)
+        if basename(absolute_file_directory) == 'latest':
+            target = path_utils.get_target_for_latest_image_sequence_directory(project_root, absolute_file_directory)
+            dependencies.add(target)
+        else:
+            assets.add(path_utils.replace_absolute_project_prefix(project_root, absolute_file))
+
+    return (assets, dependencies)
 
 def generate_render_file(context):
     # select the source for the new target
@@ -116,22 +158,10 @@ def generate_render_file(context):
             }
 
         # We start with a clean slate in terms of determining dependencies.
-        dependencies = set()
-
-        # look for dependencies on rendered outputs of other targets.
-        if context.scene.sequence_editor and context.scene.sequence_editor.sequences_all and render_graph:
-
-            for sequence in context.scene.sequence_editor.sequences_all:
-                if not hasattr(sequence, 'directory'):
-                    continue
-                sequence_directory = bpy.path.abspath(sequence.directory)
-                # this looks like the output of a target.
-                if basename(dirname(sequence_directory)) == 'latest':
-                    target = path_utils.get_target_for_latest_image_sequence_directory(absolute_project_root,
-                                                                                       sequence_directory)
-                    dependencies.add(target)
+        (assets, dependencies) = evaluate_references(absolute_project_root)
 
         this_target['deps'] = list(dependencies)
+        this_target['assets'] = list(assets)
 
         render_file_dict['targets'].append(this_target)
         with open(render_file, 'w') as f:

@@ -36,7 +36,14 @@ class RenderGraph:
             self.targets[full_target_name] = target_dict
 
     def get_deps_for_target(self, target_name):
-        return self.targets[target_name]['deps']
+        if 'deps' in self.targets[target_name]:
+            return self.targets[target_name]['deps']
+        return []
 
     def get_blend_file_for_target(self, target_name):
         return self.targets[target_name]['src']
+
+    def get_assets_for_target(self, target_name):
+        if 'assets' in self.targets[target_name]:
+            return self.targets[target_name]['assets']
+        return []
