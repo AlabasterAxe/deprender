@@ -35,7 +35,7 @@ except ImportError:
 bl_info = {
     "name": "DepRender",
     "author": "Matt Keller <matthew.ed.keller@gmail.com> and Jon Bedard <bedardjo@gmail.com:>",
-    "version": (1, 0, 9),
+    "version": (1, 0, 13),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
@@ -147,139 +147,95 @@ def generate_render_file(context):
         return full_target
 
 
-class RENDER_PT_RenderAsTarget(bpy.types.Operator):
+class AbstractRenderOperator(bpy.types.Operator):
+    _timer = None
+
+    rm = None
+
+    def modal(self, context, event):
+        if event.type in {'ESC'}:
+            self.cancel(context)
+            return {'CANCELLED'}
+
+        if event.type == 'TIMER':
+            if not self.rm.is_done():
+                self.rm.launch_next_tasks()
+                context.window_manager.progress_update(50)
+            else:
+                wm = context.window_manager
+                wm.event_timer_remove(self._timer)
+                wm.progress_end()
+                return {'FINISHED'}
+
+        return {'PASS_THROUGH'}
+
+    def execute(self, context):
+        wm = context.window_manager
+        wm.progress_begin(0, 100)
+        self._timer = wm.event_timer_add(0.1, context.window)
+        wm.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def getTaskSpec(self, target):
+        return {
+            'target': target,
+            'resolution_x': bpy.context.scene.render.resolution_x,
+            'resolution_y': bpy.context.scene.render.resolution_y
+        }
+
+    def invoke(self, context, event):
+        full_target = generate_render_file(context)
+
+        project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
+
+        task_spec = self.getTaskSpec(full_target)
+
+        if context.scene.dep_render_settings.render_strategy == 'distributed':
+            new_render_task_file = join(project_root, RELATIVE_RENDER_TASKS_DIRECTORY,
+                                        basename(bpy.data.filepath)) + '.json'
+            with open(new_render_task_file, 'w') as f:
+                json.dump(task_spec, f)
+            return {'FINISHED'}
+
+        self.rm = render_manager.RenderManager(
+            project_root,
+            task_spec,
+            [local_processor.LocalProcessor(project_root)]
+        )
+        self.execute(context)
+        return {'RUNNING_MODAL'}
+
+    def cancel(self, context):
+        self.rm.cancel()
+        wm = context.window_manager
+        wm.progress_end()
+        wm.event_timer_remove(self._timer)
+
+
+class RENDER_PT_RenderAsTarget(AbstractRenderOperator):
     """ Render the current blend file, taking into account its dependencies. """
     bl_idname = "deprender.render_target"
     bl_label = "Target"
 
-    _timer = None
-
-    rm = None
-
-    def modal(self, context, event):
-        if event.type in {'ESC'}:
-            self.cancel(context)
-            return {'CANCELLED'}
-
-        if event.type == 'TIMER':
-            if not self.rm.is_done():
-                self.rm.launch_next_tasks()
-                context.window_manager.progress_update(50)
-            else:
-                wm = context.window_manager
-                wm.event_timer_remove(self._timer)
-                wm.progress_end()
-                return {'FINISHED'}
-
-        return {'PASS_THROUGH'}
-
-    def execute(self, context):
-        wm = context.window_manager
-        wm.progress_begin(0, 100)
-        self._timer = wm.event_timer_add(0.1, context.window)
-        wm.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
-
-    def invoke(self, context, event):
-        full_target = generate_render_file(context)
-
-        project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
-
-        task_spec = {
-          'target': full_target,
-          'dependency_invalidation_types': ['FILE_MODIFICATION_TIME'],
-          'resolution_x': bpy.context.scene.render.resolution_x,
-          'resolution_y': bpy.context.scene.render.resolution_y
-        }
-
-        if context.scene.dep_render_settings.render_strategy == 'distributed':
-            new_render_task_file = join(project_root, RELATIVE_RENDER_TASKS_DIRECTORY,
-                                        basename(bpy.data.filepath)) + '.json'
-            with open(new_render_task_file, 'w') as f:
-                json.dump(task_spec, f)
-            return {'FINISHED'}
-
-        self.rm = render_manager.RenderManager(
-            project_root,
-            task_spec,
-            [local_processor.LocalProcessor(project_root)]
-        )
-        self.execute(context)
-        return {'RUNNING_MODAL'}
-
-    def cancel(self, context):
-        self.rm.cancel()
-        wm = context.window_manager
-        wm.progress_end()
-        wm.event_timer_remove(self._timer)
+    def getTaskSpec(self, target):
+        base_task_spec = super().getTaskSpec(target)
+        base_task_spec.update({
+            'dependency_invalidation_types': ['FILE_MODIFICATION_TIME'],
+        })
+        return base_task_spec
 
 
-class RENDER_PT_RenderAsFile(bpy.types.Operator):
+class RENDER_PT_RenderAsFile(AbstractRenderOperator):
     """ Render just this file. """
     bl_idname = "deprender.render_file"
     bl_label = "File"
 
-    _timer = None
-
-    rm = None
-
-    def modal(self, context, event):
-        if event.type in {'ESC'}:
-            self.cancel(context)
-            return {'CANCELLED'}
-
-        if event.type == 'TIMER':
-            if not self.rm.is_done():
-                self.rm.launch_next_tasks()
-                context.window_manager.progress_update(50)
-            else:
-                wm = context.window_manager
-                wm.event_timer_remove(self._timer)
-                wm.progress_end()
-                return {'FINISHED'}
-
-        return {'PASS_THROUGH'}
-
-    def execute(self, context):
-        wm = context.window_manager
-        self._timer = wm.event_timer_add(0.1, context.window)
-        wm.progress_begin(0, 100)
-        wm.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
-
-    def invoke(self, context, event):
-        full_target = generate_render_file(context)
-
-        project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
-
-        # An empty dependency_invalidation_types list indicates that just this target should be rendered
-        task_spec = {
-          'target': full_target,
-          'dependency_invalidation_types': [],
-          'resolution_x': bpy.context.scene.render.resolution_x,
-          'resolution_y': bpy.context.scene.render.resolution_y
-        }
-
-        if context.scene.dep_render_settings.render_strategy == 'distributed':
-            new_render_task_file = join(project_root, RELATIVE_RENDER_TASKS_DIRECTORY,
-                                        basename(bpy.data.filepath)) + '.json'
-            with open(new_render_task_file, 'w') as f:
-                json.dump(task_spec, f)
-            return {'FINISHED'}
-
-        self.rm = render_manager.RenderManager(
-            project_root,
-            task_spec,
-            [local_processor.LocalProcessor(project_root)]
-        )
-        self.execute(context)
-        return {'RUNNING_MODAL'}
-
-    def cancel(self, context):
-        self.rm.cancel()
-        wm = context.window_manager
-        wm.progress_end()
-        wm.event_timer_remove(self._timer)
+    def getTaskSpec(self, target):
+        base_task_spec = super().getTaskSpec(target)
+        base_task_spec.update({
+            'dependency_invalidation_types': [],
+        })
+        return base_task_spec
 
 
 class DepRenderSettings(PropertyGroup):
@@ -300,13 +256,24 @@ class DepRenderSettings(PropertyGroup):
 
 
 def register():
-    bpy.utils.register_module(__name__)
+    # We explicitly register and unregister all the classes here and below (as opposed to using
+    # bpy.utils.register_module(__name__)) so that Blender doesn't try to install the our abstract subclass of operator.
+    #
+    # TODO(mattkeller): I'm actually just assuming here and haven't tried if this actually explodes so I should
+    #                   double check whether this is actually necessary.
+    bpy.utils.register_class(DepRenderPanel)
+    bpy.utils.register_class(RENDER_PT_RenderAsTarget)
+    bpy.utils.register_class(RENDER_PT_RenderAsFile)
+    bpy.utils.register_class(DepRenderSettings)
     bpy.types.Scene.dep_render_settings = PointerProperty(type=DepRenderSettings)
 
 
 def unregister():
     del bpy.types.Scene.dep_render_settings
-    bpy.utils.unregister_module(__name__)
+    bpy.utils.unregister_class(DepRenderPanel)
+    bpy.utils.unregister_class(RENDER_PT_RenderAsTarget)
+    bpy.utils.unregister_class(RENDER_PT_RenderAsFile)
+    bpy.utils.unregister_class(DepRenderSettings)
 
 
 if __name__ == "__main__":
