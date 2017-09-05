@@ -127,15 +127,26 @@ class LocalProcessor:
         print(blend_file)
         assert os.path.exists(blend_file)
 
-        # Actually execute the render
-        return Popen([
+        cmd = [
             'blender',
             '-b',  # run in the background
             blend_file,  # render this file
             '-P', custom_settings_script,
             '-o', output_format,  # output the results in this format
-            '-a',  # render the animation from start frame to end frame, inclusive
-        ])
+        ]
+
+        if 'start_frame' in task_spec and 'end_frame' in task_spec:
+            cmd.extend(['-s', str(task_spec['start_frame'])])
+            cmd.extend(['-e', str(task_spec['end_frame'])])
+        elif 'start_frame' in task_spec or 'end_frame' in task_spec:
+            raise AssertionError('Please specify either both start_frame and end_frame or neither.')
+
+        # Render whatever the saved file says.
+        cmd.append('-a')
+
+        # Actually execute the render.
+        print('Executing command: \n%s' % cmd)
+        return Popen(cmd)
 
 
 # this method should be called once the render to update the status files:

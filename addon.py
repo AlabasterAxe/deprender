@@ -33,7 +33,7 @@ except ImportError:
 bl_info = {
     "name": "DepRender",
     "author": "Matt Keller <matthew.ed.keller@gmail.com> and Jon Bedard <bedardjo@gmail.com:>",
-    "version": (1, 0, 15),
+    "version": (1, 0, 16),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
@@ -114,7 +114,10 @@ def evaluate_references(project_root):
             target = path_utils.get_target_for_latest_image_sequence_directory(project_root, absolute_file_directory)
             dependencies.add(target)
         else:
-            assets.add(path_utils.replace_absolute_project_prefix(project_root, absolute_file))
+            try:
+                assets.add(path_utils.replace_absolute_project_prefix(project_root, absolute_file))
+            except ValueError:
+                print('DepRender used relativize on %s ...but it failed!' % absolute_file)
 
     return (assets, dependencies)
 
@@ -210,7 +213,9 @@ class AbstractRenderOperator(bpy.types.Operator):
         return {
             'target': target,
             'resolution_x': bpy.context.scene.render.resolution_x,
-            'resolution_y': bpy.context.scene.render.resolution_y
+            'resolution_y': bpy.context.scene.render.resolution_y,
+            'start_frame': bpy.context.scene.frame_start,
+            'end_frame': bpy.context.scene.frame_end,
         }
 
     def invoke(self, context, event):
