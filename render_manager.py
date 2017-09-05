@@ -5,6 +5,8 @@ import queue
 import time
 from os.path import join
 
+import math
+
 import render_graph
 from path_utils import (
     get_directory_for_target,
@@ -30,6 +32,7 @@ class RenderManager:
 
         self.task_queue = queue.Queue()
 
+        # The Queue class doesn't have a putall method, I swear.
         for task in task_list:
             self.task_queue.put(task)
 
@@ -61,9 +64,17 @@ class RenderManager:
         # Give those tasks to those workers, keeping the references to the ongoing
         # tasks
         if not self.task_queue.empty() and available_processors:
-            for processor in available_processors:
+
+            # TODO(mattkeller): find a less gross way to phrase this code.
+            if self.task_queue.qsize() == 1:
                 task_spec = self.task_queue.get()
-                self.current_task_statuses.append(processor.process(task_spec))
+                split_tasks = split_task(task_spec, len(available_processors))
+                for index, processor in enumerate(available_processors):
+                    self.current_task_statuses.append(processor.process(split_tasks[index]))
+            else:
+                for processor in available_processors:
+                    task_spec = self.task_queue.get()
+                    self.current_task_statuses.append(processor.process(task_spec))
 
     def blocking_render(self):
         while not self.is_done():
@@ -125,6 +136,30 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
         new_task['output_directory'] = replace_absolute_project_prefix(project_root, absolute_output_directory)
         blend_files.append(new_task)
     return blend_files
+
+def split_task(task_spec, num_sub_tasks):
+    if 'start_frame' not in task_spec or 'end_frame' not in task_spec:
+        return task_spec
+    start_frame = task_spec['start_frame']
+    end_frame = task_spec['end_frame']
+    frame_range = end_frame - start_frame
+    segment_size = math.ceil(frame_range / num_sub_tasks)
+    new_frame_ranges = []
+    temp_start = start_frame
+    temp_end = None
+    while len(new_frame_ranges) < num_sub_tasks:
+        temp_end = temp_start + segment_size
+        if temp_end > end_frame:
+            temp_end = end_frame
+        new_frame_ranges.append((temp_start, temp_end))
+        temp_start = temp_end + 1
+    new_tasks = []
+    for frame_range in new_frame_ranges:
+        new_task = copy.copy(task_spec)
+        new_task['start_frame'] = frame_range[0]
+        new_task['end_frame'] = frame_range[1]
+        new_tasks.append(new_task)
+    return new_tasks
 
 
 def needs_rerender(project_root, rg, target):

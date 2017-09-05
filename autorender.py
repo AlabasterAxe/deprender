@@ -27,7 +27,9 @@ def check_for_new_tasks():
         rm = render_manager.RenderManager(
             animation_project_root_directory,
             task_spec,
-            [local_processor.LocalProcessor(animation_project_root_directory)]
+            [local_processor.LocalProcessor(animation_project_root_directory),
+             local_processor.LocalProcessor(animation_project_root_directory),
+             local_processor.LocalProcessor(animation_project_root_directory)]
         )
 
         rm.blocking_render()

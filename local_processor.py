@@ -84,7 +84,8 @@ class LocalProcessor:
             elif os.path.exists(in_progress_metadata_file):
                 with open(in_progress_metadata_file, 'r') as f:
                     in_progress_metadata = json.load(f)
-                    if 'dependency_invalidation_types' in task_spec and 'IN_PROGRESS_RENDER' in task_spec['dependency_invalidation_types']:
+                    if 'dependency_invalidation_types' in task_spec and 'IN_PROGRESS_RENDER' in task_spec[
+                        'dependency_invalidation_types']:
                         new_directory_name = time.strftime("%Y-%m-%d_%H-%M-%S_INCOMPLETE",
                                                            time.gmtime(in_progress_metadata['start_time']))
                     else:
