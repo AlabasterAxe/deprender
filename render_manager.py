@@ -137,33 +137,42 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
         blend_files.append(new_task)
     return blend_files
 
+
 def split_task(task_spec, num_sub_tasks):
     if 'start_frame' not in task_spec or 'end_frame' not in task_spec:
         return task_spec
     start_frame = task_spec['start_frame']
     end_frame = task_spec['end_frame']
+
     frame_range = end_frame - start_frame
     segment_size = math.ceil(frame_range / num_sub_tasks)
+
     new_frame_ranges = []
     temp_start = start_frame
-    temp_end = None
-    while len(new_frame_ranges) < num_sub_tasks:
-        temp_end = temp_start + segment_size
-        if temp_end > end_frame:
-            temp_end = end_frame
+    temp_end = (start_frame + segment_size) - 1
+    for i in range(num_sub_tasks):
         new_frame_ranges.append((temp_start, temp_end))
         temp_start = temp_end + 1
+        if i == (num_sub_tasks - 2):
+            temp_end = end_frame
+        else:
+            temp_end = (temp_start + segment_size) - 1
+
+    # second element of last tuple is end_frame
+    print(new_frame_ranges)
+    assert new_frame_ranges[-1][1] == end_frame
+
     new_tasks = []
     for frame_range in new_frame_ranges:
         new_task = copy.copy(task_spec)
         new_task['start_frame'] = frame_range[0]
         new_task['end_frame'] = frame_range[1]
         new_tasks.append(new_task)
+
     return new_tasks
 
 
 def needs_rerender(project_root, rg, target):
-
     blend_file_mtime = os.path.getmtime(
         get_absolute_blend_file(project_root, target, rg.get_blend_file_for_target(target)))
 
