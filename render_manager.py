@@ -148,15 +148,10 @@ def split_task(task_spec, num_sub_tasks):
     segment_size = math.ceil(frame_range / num_sub_tasks)
 
     new_frame_ranges = []
-    temp_start = start_frame
-    temp_end = (start_frame + segment_size) - 1
     for i in range(num_sub_tasks):
-        new_frame_ranges.append((temp_start, temp_end))
-        temp_start = temp_end + 1
-        if i == (num_sub_tasks - 2):
-            temp_end = end_frame
-        else:
-            temp_end = (temp_start + segment_size) - 1
+        seg_frame_start = start_frame + segment_size * i
+        seg_frame_end = end_frame if i == num_sub_tasks - 1 else seg_frame_start + segment_size - 1
+        new_frame_ranges.append((seg_frame_start, seg_frame_end))
 
     # second element of last tuple is end_frame
     print(new_frame_ranges)
