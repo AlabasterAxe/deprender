@@ -54,9 +54,3 @@ class TestRenderManager(TestCase):
         last_sub_task = sub_tasks[-1]
         assert last_sub_task['start_frame'] == 0
         assert last_sub_task['end_frame'] == 10
-
-print('poop2')
-tests = TestRenderManager()
-tests.test_split_tasks()
-tests.test_split_tasks_2()
-tests.test_split_tasks_into_one()
