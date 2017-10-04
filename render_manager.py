@@ -128,7 +128,7 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
     #    a list of blender file tasks)
     #  - the dependency_invalidation_types list is empty (indicating a fast rerender requested)
 
-    if needs_rerender(project_root, rg, target) or blend_files or not dependency_invalidation_types:
+    if needs_rerender(project_root, rg, target_task) or blend_files or not dependency_invalidation_types:
         new_task = copy.copy(new_task_template)
         absolute_blend_file = get_absolute_blend_file(project_root, target, rg.get_blend_file_for_target(target))
         new_task['blend_file'] = replace_absolute_project_prefix(project_root, absolute_blend_file)
@@ -148,15 +148,10 @@ def split_task(task_spec, num_sub_tasks):
     segment_size = math.ceil(frame_range / num_sub_tasks)
 
     new_frame_ranges = []
-    temp_start = start_frame
-    temp_end = (start_frame + segment_size) - 1
     for i in range(num_sub_tasks):
-        new_frame_ranges.append((temp_start, temp_end))
-        temp_start = temp_end + 1
-        if i == (num_sub_tasks - 2):
-            temp_end = end_frame
-        else:
-            temp_end = (temp_start + segment_size) - 1
+        seg_frame_start = start_frame + segment_size * i
+        seg_frame_end = end_frame if i == num_sub_tasks - 1 else seg_frame_start + segment_size - 1
+        new_frame_ranges.append((seg_frame_start, seg_frame_end))
 
     # second element of last tuple is end_frame
     print(new_frame_ranges)
@@ -171,8 +166,9 @@ def split_task(task_spec, num_sub_tasks):
 
     return new_tasks
 
-
-def needs_rerender(project_root, rg, target):
+# rg: RenderGraph
+def needs_rerender(project_root, rg, target_task):
+    target = target_task['target']
     blend_file_mtime = os.path.getmtime(
         get_absolute_blend_file(project_root, target, rg.get_blend_file_for_target(target)))
 
@@ -191,5 +187,14 @@ def needs_rerender(project_root, rg, target):
             completion_metadata_file = json.load(f)
 
         latest_render = completion_metadata_file['start_time']
+        if 'task_spec' in completion_metadata_file:
+            # possibly use computed dimensions here...
+            # TODO(jbedard): should we only reprocess if target dimensions are higher?
+            if 'resolution_x' in completion_metadata_file and 'resolution_x' in target_task and completion_metadata_file['resolution_x'] != target_task['resolution_x']:
+                return True
+            elif 'resolution_y' in completion_metadata_file and 'resolution_y' in target_task and completion_metadata_file['resolution_y'] != target_task['resolution_y']:
+                return True
+            elif 'resolution_percentage' in completion_metadata_file and 'resolution_percentage' in target_task and completion_metadata_file['resolution_percentage'] != target_task['resolution_percentage']:
+                return True
 
     return latest_render < max(relevant_mtimes)

@@ -230,6 +230,7 @@ class AbstractRenderOperator(bpy.types.Operator):
             'target': target,
             'resolution_x': bpy.context.scene.render.resolution_x,
             'resolution_y': bpy.context.scene.render.resolution_y,
+            'resolution_percentage': bpy.context.scene.render.resolution_percentage,
             'start_frame': bpy.context.scene.frame_start,
             'end_frame': bpy.context.scene.frame_end,
         }
