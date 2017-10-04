@@ -1,11 +1,10 @@
 import copy
 import json
+import math
 import os
 import queue
 import time
 from os.path import join
-
-import math
 
 import render_graph
 from path_utils import (
@@ -166,6 +165,7 @@ def split_task(task_spec, num_sub_tasks):
 
     return new_tasks
 
+
 # rg: RenderGraph
 def needs_rerender(project_root, rg, target_task):
     target = target_task['target']
@@ -183,18 +183,28 @@ def needs_rerender(project_root, rg, target_task):
     if not os.path.exists(done_file):
         return True
     else:
+        dependency_invalidation_types = target_task['dependency_invalidation_types']
+
         with open(done_file, 'r') as f:
             completion_metadata_file = json.load(f)
 
         latest_render = completion_metadata_file['start_time']
-        if 'task_spec' in completion_metadata_file:
+
+        # If task_spec is not in completion_metadata_file maybe we should rerender?
+        if 'task_spec' in completion_metadata_file and 'RESOLUTION_CHANGE' in dependency_invalidation_types:
             # possibly use computed dimensions here...
             # TODO(jbedard): should we only reprocess if target dimensions are higher?
-            if 'resolution_x' in completion_metadata_file and 'resolution_x' in target_task and completion_metadata_file['resolution_x'] != target_task['resolution_x']:
+            if 'resolution_x' in completion_metadata_file and 'resolution_x' in target_task and \
+                            completion_metadata_file['resolution_x'] != target_task['resolution_x']:
                 return True
-            elif 'resolution_y' in completion_metadata_file and 'resolution_y' in target_task and completion_metadata_file['resolution_y'] != target_task['resolution_y']:
+            elif 'resolution_y' in completion_metadata_file and 'resolution_y' in target_task and \
+                            completion_metadata_file['resolution_y'] != target_task['resolution_y']:
                 return True
-            elif 'resolution_percentage' in completion_metadata_file and 'resolution_percentage' in target_task and completion_metadata_file['resolution_percentage'] != target_task['resolution_percentage']:
+            elif 'resolution_percentage' in completion_metadata_file and 'resolution_percentage' in target_task and \
+                            completion_metadata_file['resolution_percentage'] != target_task['resolution_percentage']:
                 return True
 
-    return latest_render < max(relevant_mtimes)
+        if latest_render < max(relevant_mtimes) and 'FILE_MODIFICATION_TIME' in dependency_invalidation_types:
+            return True
+
+    return False

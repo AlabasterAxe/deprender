@@ -276,7 +276,7 @@ class RENDER_PT_RenderAsTarget(AbstractRenderOperator):
     def getTaskSpec(self, target):
         base_task_spec = super().getTaskSpec(target)
         base_task_spec.update({
-            'dependency_invalidation_types': ['FILE_MODIFICATION_TIME'],
+            'dependency_invalidation_types': ['FILE_MODIFICATION_TIME', 'RESOLUTION_CHANGE'],
         })
         return base_task_spec
 
