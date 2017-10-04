@@ -15,6 +15,7 @@ from bpy.props import (
     StringProperty,
     PointerProperty,
     EnumProperty,
+    IntProperty,
 )
 from bpy.types import PropertyGroup
 
@@ -33,7 +34,7 @@ except ImportError:
 bl_info = {
     "name": "DepRender",
     "author": "Matt Keller <matthew.ed.keller@gmail.com> and Jon Bedard <bedardjo@gmail.com:>",
-    "version": (1, 0, 16),
+    "version": (1, 0, 19),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
@@ -72,6 +73,9 @@ class DepRenderPanel(bpy.types.Panel):
         row = layout.row(align=True)
         row.label(text="Strategy:")
         row.prop(settings, "render_strategy", expand=True)
+
+        row = layout.row(align=True)
+        row.prop(settings, "local_parallelism")
 
 
 def evaluate_references(project_root):
@@ -121,12 +125,14 @@ def evaluate_references(project_root):
 
     return (assets, dependencies)
 
+
 def generate_render_file(context):
     # select the source for the new target
     blend_file = bpy.data.filepath
     target_directory = path_utils.get_target_root_for_blend_file(blend_file)
     absolute_project_root = bpy.path.abspath(context.scene.dep_render_settings.project_root)
 
+    print('Updating render file for %s' % blend_file)
     if target_directory:
 
         render_file = join(target_directory, 'RENDER.json')
@@ -162,6 +168,15 @@ def generate_render_file(context):
 
         # We start with a clean slate in terms of determining dependencies.
         (assets, dependencies) = evaluate_references(absolute_project_root)
+        if assets:
+            print('We detected the following assets:')
+            for asset in assets:
+                print('  %s' % asset)
+
+        if dependencies:
+            print('We detected the following dependencies:')
+            for dependency in dependencies:
+                print('  %s' % dependency)
 
         this_target['deps'] = list(dependencies)
         this_target['assets'] = list(assets)
@@ -169,6 +184,7 @@ def generate_render_file(context):
         render_file_dict['targets'].append(this_target)
         with open(render_file, 'w') as f:
             # indent=2 pretty prints the json, otherwise it's all on one line.
+            print('Writing new RENDER.json file')
             json.dump(render_file_dict, f, indent=2)
 
         if this_target['name'].startswith('//'):
@@ -232,10 +248,14 @@ class AbstractRenderOperator(bpy.types.Operator):
                 json.dump(task_spec, f)
             return {'FINISHED'}
 
+        workers = []
+        for i in range(context.scene.dep_render_settings.local_parallelism):
+            workers.append(local_processor.LocalProcessor(project_root))
+
         self.rm = render_manager.RenderManager(
             project_root,
             task_spec,
-            [local_processor.LocalProcessor(project_root)]
+            workers
         )
         self.execute(context)
         return {'RUNNING_MODAL'}
@@ -287,6 +307,12 @@ class DepRenderSettings(PropertyGroup):
             ('distributed', "Distributed", "A render task is created and will be processed by a slave.")),
         default='immediate',
         description="How to execute a render.",
+    )
+
+    local_parallelism = IntProperty(
+        name="Local Parallelism",
+        default=1,
+        description="The number of sub tasks to launch locally to render the scene.",
     )
 
 
