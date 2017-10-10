@@ -34,7 +34,7 @@ except ImportError:
 bl_info = {
     "name": "DepRender",
     "author": "Matt Keller <matthew.ed.keller@gmail.com> and Jon Bedard <bedardjo@gmail.com:>",
-    "version": (1, 0, 19),
+    "version": (1, 0, 20),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
@@ -94,9 +94,14 @@ def evaluate_references(project_root):
         bpy.data.sounds,
     ]
 
+    # A local render result shouldn't be treated as a dependency.
+    IGNORED_DEPENDENCY_TYPES = ['RENDER_RESULT']
+
     for entity_type in simple_entities:
         for entity in entity_type:
-            external_files.add(entity.filepath)
+            if hasattr(entity, 'type') and entity.type not in IGNORED_DEPENDENCY_TYPES:
+                external_files.add(entity.filepath)
+         
 
     for scene in bpy.data.scenes:
         if scene.sequence_editor and scene.sequence_editor.sequences_all:
