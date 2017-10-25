@@ -34,7 +34,7 @@ except ImportError:
 bl_info = {
     "name": "DepRender",
     "author": "Matt Keller <matthew.ed.keller@gmail.com> and Jon Bedard <bedardjo@gmail.com:>",
-    "version": (1, 0, 26),
+    "version": (1, 0, 27),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
@@ -101,7 +101,6 @@ def evaluate_references(project_root):
         for entity in entity_type:
             if hasattr(entity, 'type') and entity.type not in IGNORED_DEPENDENCY_TYPES:
                 external_files.add(entity.filepath)
-         
 
     for scene in bpy.data.scenes:
         if scene.sequence_editor and scene.sequence_editor.sequences_all:
@@ -121,7 +120,9 @@ def evaluate_references(project_root):
         absolute_file_directory = dirname(absolute_file)
         if basename(absolute_file_directory) == 'latest':
             target = path_utils.get_target_for_latest_image_sequence_directory(project_root, absolute_file_directory)
-            dependencies.add(target)
+            if target and target not in dependencies:
+                print('We got the target %s from the absolute file %s' % (target, absolute_file))
+                dependencies.add(target)
         else:
             try:
                 assets.add(path_utils.replace_absolute_project_prefix(project_root, absolute_file))
@@ -140,7 +141,7 @@ def generate_render_file(context):
     print('Updating render file for %s' % blend_file)
     if target_directory:
 
-        render_file = join(target_directory, 'RENDER.json')
+        render_file = path_utils.get_render_file_name_for_target_directory(absolute_project_root, target_directory)
         source_file = relpath(blend_file, target_directory).replace('\\', '/')
 
         # check if the file exists

@@ -1,5 +1,6 @@
 """ Utilities for working with blend files, target paths, etc."""
 import os
+import json
 from os.path import join, dirname, abspath, basename
 
 
@@ -41,7 +42,16 @@ def get_blend_files_directory_for_target(project_root, target):
     return join(get_directory_for_target(project_root, target), 'blend_files')
 
 
+def get_render_file_name_for_target(project_root, target):
+    return get_render_file_name_for_target_directory(project_root, get_directory_for_target(project_root, target))
+
+
+def get_render_file_name_for_target_directory(project_root, target_directory):
+    return join(target_directory, 'RENDER.json')
+
+
 def get_target_for_latest_image_sequence_directory(project_root, latest_directory):
+    """This function returns the target for the latest image sequence directory, if it exists, otherwise None."""
     if basename(latest_directory) == "":
         image_sequence_directory = dirname(dirname(latest_directory))
     else:
@@ -52,7 +62,21 @@ def get_target_for_latest_image_sequence_directory(project_root, latest_director
 
     relative_path = replace_absolute_project_prefix(project_root, target_root)
 
-    return ':'.join([relative_path, target_name])
+    absolute_target_name = ':'.join([relative_path, target_name])
+
+    render_file_name = get_render_file_name_for_target(project_root, absolute_target_name)
+    if os.path.exists(render_file_name):
+        with open(render_file_name, 'r') as f:
+            render_file_dict = json.load(f)
+
+        if 'targets' in render_file_dict:
+            for target in render_file_dict['targets']:
+                if 'name' in target and target['name'] == target_name:
+                    return absolute_target_name
+                else:
+                    print('Improperly formatted target in: %s' % render_file_name)
+
+    return None
 
 
 # Blend file utility methods.

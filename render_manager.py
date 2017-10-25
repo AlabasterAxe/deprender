@@ -119,7 +119,20 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
         for dep_target in rg.get_deps_for_target(target):
             dep_task = copy.copy(new_task_template)
             dep_task['target'] = dep_target
-            blend_files.extend(get_blend_file_task_linearized_dag_from_target_task(project_root, dep_task, rg))
+            for dep_blend_file_task in get_blend_file_task_linearized_dag_from_target_task(project_root, dep_task, rg):
+                scheduled = False
+
+                # if dep_blend_file_task is in blend_files already we don't need to add it again.
+                # we can probably do this more efficiently some how, possibly we build the graph and produce the dag
+                # in two passes?
+                for blend_file in blend_files:
+                    if dep_blend_file_task == blend_file:
+                        scheduled = True
+                        break
+                if scheduled:
+                    continue
+                else:
+                    blend_files.append(dep_blend_file_task)
 
     # Basically, there are three reasons we'll rerender the blend file:
     #  - the source blend file for the target has changed since the start time of the latest render
