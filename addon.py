@@ -34,13 +34,13 @@ except ImportError:
 bl_info = {
     "name": "DepRender",
     "author": "Matt Keller <matthew.ed.keller@gmail.com> and Jon Bedard <bedardjo@gmail.com:>",
-    "version": (1, 0, 20),
+    "version": (1, 0, 26),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
     "warning": "",
-    "wiki_url": "example.com",
-    "tracker_url": "example.com",
+    "wiki_url": "emissivestache.com",
+    "tracker_url": "emissivestache.com",
     "support": "COMMUNITY",
     "category": "Render",
 }
@@ -224,23 +224,6 @@ class AbstractRenderOperator(bpy.types.Operator):
         return {'PASS_THROUGH'}
 
     def execute(self, context):
-        wm = context.window_manager
-        wm.progress_begin(0, 100)
-        self._timer = wm.event_timer_add(0.1, context.window)
-        wm.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
-
-    def getTaskSpec(self, target):
-        return {
-            'target': target,
-            'resolution_x': bpy.context.scene.render.resolution_x,
-            'resolution_y': bpy.context.scene.render.resolution_y,
-            'resolution_percentage': bpy.context.scene.render.resolution_percentage,
-            'start_frame': bpy.context.scene.frame_start,
-            'end_frame': bpy.context.scene.frame_end,
-        }
-
-    def invoke(self, context, event):
         full_target = generate_render_file(context)
 
         project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
@@ -263,8 +246,45 @@ class AbstractRenderOperator(bpy.types.Operator):
             task_spec,
             workers
         )
-        self.execute(context)
+        wm = context.window_manager
+        wm.progress_begin(0, 100)
+        self._timer = wm.event_timer_add(0.1, context.window)
+        wm.modal_handler_add(self)
         return {'RUNNING_MODAL'}
+
+    def getTaskSpec(self, target):
+        return {
+            'target': target,
+            'resolution_x': bpy.context.scene.render.resolution_x,
+            'resolution_y': bpy.context.scene.render.resolution_y,
+            'resolution_percentage': bpy.context.scene.render.resolution_percentage,
+            'start_frame': bpy.context.scene.frame_start,
+            'end_frame': bpy.context.scene.frame_end,
+        }
+
+    def draw(self, context):
+        project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
+        full_target = generate_render_file(context)
+        task_spec = self.getTaskSpec(full_target)
+        blend_file_tasks = render_manager.get_blend_file_task_linearized_dag_from_target_task(project_root, task_spec)
+        layout = self.layout
+
+        row = layout.row()
+        if blend_file_tasks:
+            for task in blend_file_tasks:
+                if 'blend_file' in task:
+                    row.label(text=basename(task['blend_file']))
+                else:
+                    # Definitely a bug.
+                    row.label("Super special secret task.")
+                row = layout.row()
+
+        else:
+          row.label(text="Nothing to do!")
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        return wm.invoke_props_dialog(self, width=400)
 
     def cancel(self, context):
         self.rm.cancel()
