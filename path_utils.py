@@ -98,7 +98,8 @@ def get_target_root_for_blend_file(blend_file):
     In this example, the method will return the absolute path to target_directory.
 
     If we don't see the blend_files directory, we return None under the assumption that this is a blend file
-    that doesn't live in a well defined target so we're sure where we should put the results of a render, for example.
+    that doesn't live in a well defined target so we're not sure where we should put the results of a render, for
+    example.
 
     :param blend_file: blend file nested in a valid target structure.
     :return: the absolute path to the directory that contains the target that references that blend file.

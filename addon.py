@@ -34,7 +34,7 @@ except ImportError:
 bl_info = {
     "name": "DepRender",
     "author": "Matt Keller <matthew.ed.keller@gmail.com> and Jon Bedard <bedardjo@gmail.com:>",
-    "version": (1, 0, 27),
+    "version": (1, 0, 28),
     "blender": (2, 70, 0),
     "location": "Render Panel",
     "description": "Dependency aware rendering.",
@@ -200,12 +200,16 @@ def generate_render_file(context):
                                     this_target['name']])
         print(full_target)
         return full_target
+    return None
+
 
 
 class AbstractRenderOperator(bpy.types.Operator):
     _timer = None
 
     rm = None
+
+    full_target = None
 
     def modal(self, context, event):
         if event.type in {'ESC'}:
@@ -227,9 +231,10 @@ class AbstractRenderOperator(bpy.types.Operator):
     def execute(self, context):
         full_target = generate_render_file(context)
 
+
         project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
 
-        task_spec = self.getTaskSpec(full_target)
+        task_spec = self.get_task_spec(full_target)
 
         if context.scene.dep_render_settings.render_strategy == 'distributed':
             new_render_task_file = join(project_root, RELATIVE_RENDER_TASKS_DIRECTORY,
@@ -253,7 +258,7 @@ class AbstractRenderOperator(bpy.types.Operator):
         wm.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
-    def getTaskSpec(self, target):
+    def get_task_spec(self, target):
         return {
             'target': target,
             'resolution_x': bpy.context.scene.render.resolution_x,
@@ -265,8 +270,7 @@ class AbstractRenderOperator(bpy.types.Operator):
 
     def draw(self, context):
         project_root = os.path.abspath(bpy.path.abspath(context.scene.dep_render_settings.project_root))
-        full_target = generate_render_file(context)
-        task_spec = self.getTaskSpec(full_target)
+        task_spec = self.get_task_spec(self.get_target(context))
         blend_file_tasks = render_manager.get_blend_file_task_linearized_dag_from_target_task(project_root, task_spec)
         layout = self.layout
 
@@ -283,7 +287,15 @@ class AbstractRenderOperator(bpy.types.Operator):
         else:
           row.label(text="Nothing to do!")
 
+    def get_target(self, context):
+        if not self.full_target:
+            self.full_target = generate_render_file(context)
+        return self.full_target
+
     def invoke(self, context, event):
+        if not self.get_target(context):
+            self.report({'ERROR'}, 'We were unable to determine / create the target to render. Is your .blend file in a "blend_files" directory?')
+            return {'CANCELLED'}
         wm = context.window_manager
         return wm.invoke_props_dialog(self, width=400)
 
@@ -299,8 +311,8 @@ class RENDER_PT_RenderAsTarget(AbstractRenderOperator):
     bl_idname = "deprender.render_target"
     bl_label = "Target"
 
-    def getTaskSpec(self, target):
-        base_task_spec = super().getTaskSpec(target)
+    def get_task_spec(self, target):
+        base_task_spec = super().get_task_spec(target)
         base_task_spec.update({
             'dependency_invalidation_types': ['FILE_MODIFICATION_TIME', 'RESOLUTION_CHANGE'],
         })
@@ -312,8 +324,8 @@ class RENDER_PT_RenderAsFile(AbstractRenderOperator):
     bl_idname = "deprender.render_file"
     bl_label = "File"
 
-    def getTaskSpec(self, target):
-        base_task_spec = super().getTaskSpec(target)
+    def get_task_spec(self, target):
+        base_task_spec = super().get_task_spec(target)
         base_task_spec.update({
             'dependency_invalidation_types': [],
         })
