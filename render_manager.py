@@ -110,6 +110,16 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
     new_task_template = copy.copy(target_task)
     del new_task_template['target']
 
+    # The start frame and end frame are only meaningful in the context of the original target so are not forwarded to
+    # dependent tasks.
+    #
+    # Task splitting is hooked into this so it might be good to have a way to figure this out.
+    if 'start_frame' in new_task_template:
+        del new_task_template['start_frame']
+
+    if 'end_frame' in new_task_template:
+        del new_task_template['end_frame']
+
     absolute_target_directory = get_directory_for_target(project_root, target)
     render_file = join(absolute_target_directory, 'RENDER.json')
     rg.add_targets(project_root, render_file)
