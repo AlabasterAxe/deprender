@@ -114,10 +114,14 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
     # dependent tasks.
     #
     # Task splitting is hooked into this so it might be good to have a way to figure this out.
+    root_start_frame = None
     if 'start_frame' in new_task_template:
+        root_start_frame = new_task_template['start_frame']
         del new_task_template['start_frame']
 
+    root_end_frame = None
     if 'end_frame' in new_task_template:
+        root_end_frame = new_task_template['end_frame']
         del new_task_template['end_frame']
 
     absolute_target_directory = get_directory_for_target(project_root, target)
@@ -152,6 +156,14 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
 
     if needs_rerender(project_root, rg, target_task) or blend_files or not dependency_invalidation_types:
         new_task = copy.copy(new_task_template)
+
+        # If the start and end frame were set on the incoming target task, we make sure to reattach it when we render
+        # the blend file specifically associated with the target requested.
+        if root_start_frame:
+            new_task['start_frame'] = root_start_frame
+        if root_end_frame:
+            new_task['end_frame'] = root_end_frame
+
         absolute_blend_file = get_absolute_blend_file(project_root, target, rg.get_blend_file_for_target(target))
         new_task['blend_file'] = replace_absolute_project_prefix(project_root, absolute_blend_file)
         absolute_output_directory = get_latest_image_sequence_directory_for_target(project_root, target)
@@ -161,8 +173,9 @@ def get_blend_file_task_linearized_dag_from_target_task(project_root, target_tas
 
 
 def split_task(task_spec, num_sub_tasks):
+    # Consumers of this method expect a list so we return the task_spec wrapped in a list.
     if 'start_frame' not in task_spec or 'end_frame' not in task_spec:
-        return task_spec
+        return [task_spec]
     start_frame = task_spec['start_frame']
     end_frame = task_spec['end_frame']
 
